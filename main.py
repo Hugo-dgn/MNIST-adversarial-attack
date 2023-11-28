@@ -8,9 +8,13 @@ from torch.utils.data import DataLoader
 
 import utils
 from topology import CNN
-import tkinter as tk
-from PIL import Image, ImageTk
-from PIL import Image, ImageDraw
+
+try:
+    import tkinter as tk
+    from PIL import Image, ImageTk
+    from PIL import Image, ImageDraw
+except ImportError:
+    graphics_installed = False
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
