@@ -53,6 +53,8 @@ def train(args):
     if os.path.exists("model.pth"):
         model.load_state_dict(torch.load("model.pth"))
     
+    model = model.to(device)
+    
     train_images, train_labels, test_images, test_labels = utils.load()
     
     # Convert the training data to PyTorch tensors
