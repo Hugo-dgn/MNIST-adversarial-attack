@@ -107,6 +107,7 @@ def draw_digit(args):
     if os.path.exists("model.pth"):
         model.load_state_dict(torch.load("model.pth"))
     
+    model = model.to(device)
     model.eval()
     
     # Create a tkinter window
