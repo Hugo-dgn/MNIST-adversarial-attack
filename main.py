@@ -71,25 +71,26 @@ def train(args):
     criterion = torch.nn.CrossEntropyLoss()
     
     # Iterate over the batches of training data
-    for batch_images, batch_labels in tqdm(train_loader):
-        batch_images = batch_images.to(device)
-        batch_labels = batch_labels.to(device)
-        batch_images = normalize(batch_images.unsqueeze(dim=1))
-        pred = model(batch_images)
-        
-        loss = criterion(pred, batch_labels)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        
-    #test 
-    test_images = normalize(torch.tensor(test_images, dtype=torch.float32).unsqueeze(dim=1)).squeeze(dim=1)
-    test_labels = torch.tensor(test_labels, dtype=torch.long)
-    test_images = test_images.unsqueeze(dim=1)
-    pred = model(test_images)
-    pred = pred.argmax(dim=1)
-    accuracy = (pred == test_labels).sum().item() / len(test_labels)
-    print(f"Test accuracy: {accuracy:.2f}")
+    for epoch in range(args.epoch):
+        print(f"Epoch {epoch+1}\n-------------------------------")
+        for batch_images, batch_labels in tqdm(train_loader):
+            batch_images = batch_images.to(device)
+            batch_labels = batch_labels.to(device)
+            batch_images = normalize(batch_images.unsqueeze(dim=1))
+            pred = model(batch_images)
+            
+            loss = criterion(pred, batch_labels)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        test_images = normalize(torch.tensor(test_images, dtype=torch.float32).unsqueeze(dim=1)).squeeze(dim=1)
+        test_labels = torch.tensor(test_labels, dtype=torch.long)
+        test_images = test_images.unsqueeze(dim=1)
+        pred = model(test_images)
+        pred = pred.argmax(dim=1)
+        accuracy = (pred == test_labels).sum().item() / len(test_labels)
+        print(f"Test accuracy: {accuracy}")
     
     torch.save(model.state_dict(), "model.pth")
 
@@ -257,6 +258,7 @@ if __name__ == "__main__":
     
     train_parser = subparsers.add_parser("train", help="train the model")
     train_parser.add_argument("--batch", type=int, default=64, help="batch size")
+    train_parser.add_argument("--epoch", type=int, default=5, help="number of epochs")
     train_parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
     train_parser.set_defaults(func=train)
     

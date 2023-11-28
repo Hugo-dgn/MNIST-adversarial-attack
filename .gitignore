@@ -3,3 +3,4 @@ dataset/
 .vscode/
 __pycache__/
 job.batch
+model.pth
