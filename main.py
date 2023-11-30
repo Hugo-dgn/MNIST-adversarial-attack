@@ -174,7 +174,8 @@ def draw_digit(args):
         
         update()
         
-        predict_digit()
+        if not args.optim:
+            predict_digit()
     
     # Function to predict the digit
 
@@ -258,7 +259,10 @@ def draw_digit(args):
         update()
         
         
-        
+    # Button to predict the digit
+    if args.optim:
+        predict_button = tk.Button(window, text="Predict", command=predict_digit)
+        predict_button.pack()
 
     # Button to clear the drawing
     clear_button = tk.Button(window, text="Clear", command=clear_drawing)
@@ -303,6 +307,7 @@ if __name__ == "__main__":
     
     draw_parser = subparsers.add_parser("draw", help="draw a digit")
     draw_parser.add_argument("--size", type=int, default=280, help="size of the canvas")
+    draw_parser.add_argument("--optim", action="store_true", help="optimize the image")
     draw_parser.set_defaults(func=draw_digit)
     
     benchmark_parser = subparsers.add_parser("benchmark", help="benchmark the model")

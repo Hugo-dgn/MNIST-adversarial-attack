@@ -5,3 +5,4 @@ __pycache__/
 job.batch
 model.pth
 test.py
+env

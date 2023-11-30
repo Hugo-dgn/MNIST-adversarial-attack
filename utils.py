@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import torchvision.transforms as transforms
 from torchvision.datasets import MNIST
@@ -30,6 +32,9 @@ def download():
 
     test_images = test_dataset.data.numpy()
     test_labels = test_dataset.targets.numpy()
+
+    if not os.path.exists('dataset'):
+        os.makedirs('dataset')
 
     # Save NumPy arrays to .npy files
     np.save('dataset/train_images.npy', train_images)
