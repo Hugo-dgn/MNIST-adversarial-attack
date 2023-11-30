@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.ndimage import gaussian_filter
 from tqdm.auto import tqdm
 import torch
 import os
@@ -8,6 +9,7 @@ from torch.utils.data import DataLoader
 
 import utils
 from topology import CNN
+import preprocess
 
 try:
     import tkinter as tk
@@ -25,7 +27,15 @@ def plot(args):
     
     # Select n random images
     random_indices = np.random.choice(len(train_images), size=args.n, replace=False)
-    images_to_plot = normalize(torch.tensor(train_images[random_indices]).unsqueeze(dim=1)).squeeze(dim=1).numpy()
+    
+    images_to_plot = torch.tensor(train_images[random_indices]).unsqueeze(dim=1)
+    if args.normalize:
+        images_to_plot = preprocess.normalize(images_to_plot)
+    if args.rotate:
+        images_to_plot = preprocess.rotate(images_to_plot)
+    if args.translate:
+        images_to_plot = preprocess.translate(images_to_plot)
+    images_to_plot = images_to_plot.squeeze(dim=1).numpy()
     labels_to_plot = train_labels[random_indices]
     
     # Calculate the number of rows and columns for the grid
@@ -48,6 +58,32 @@ def plot(args):
 def download(args):
     utils.download()
 
+def benchmark(args):
+    model = CNN()
+    if os.path.exists("model.pth"):
+        model.load_state_dict(torch.load("model.pth"))
+    
+    model = model.to(device)
+    model.eval()
+    
+    train_images, train_labels, test_images, test_labels = utils.load()
+    
+    test_images = preprocess.normalize(torch.tensor(test_images, dtype=torch.float32).unsqueeze(dim=1)).squeeze(dim=1)
+    test_labels = torch.tensor(test_labels, dtype=torch.long)
+    test_images = test_images.unsqueeze(dim=1)
+    
+    for i in range(10):
+        #compute the accuracy of the model fo class i
+        indices = test_labels == i
+        images = test_images[indices]
+        labels = test_labels[indices]
+        pred = model(images)
+        pred = pred.argmax(dim=1)
+        accuracy = (pred == labels).sum().item() / len(labels)
+        print(f"Test accuracy for class {i}: {accuracy}")
+    
+    
+
 def train(args):
     model = CNN()
     if os.path.exists("model.pth"):
@@ -68,40 +104,37 @@ def train(args):
     train_loader = DataLoader(dataset, batch_size=args.batch, shuffle=True)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
     criterion = torch.nn.CrossEntropyLoss()
+    
+    test_images = preprocess.normalize(torch.tensor(test_images, dtype=torch.float32).unsqueeze(dim=1)).squeeze(dim=1)
+    test_labels = torch.tensor(test_labels, dtype=torch.long)
+    test_images = test_images.unsqueeze(dim=1)
     
     # Iterate over the batches of training data
     for epoch in range(args.epoch):
         print(f"Epoch {epoch+1}\n-------------------------------")
         for batch_images, batch_labels in tqdm(train_loader):
             batch_images = batch_images.to(device)
-            batch_labels = batch_labels.to(device)
-            batch_images = normalize(batch_images.unsqueeze(dim=1))
+            batch_labels = batch_labels.to(device) 
+            
+            batch_images = preprocess.normalize(batch_images.unsqueeze(dim=1))
+            batch_images = preprocess.rotate(batch_images)
+            batch_images = preprocess.translate(batch_images)
             pred = model(batch_images)
             
             loss = criterion(pred, batch_labels)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+        scheduler.step()
 
-        test_images = normalize(torch.tensor(test_images, dtype=torch.float32).unsqueeze(dim=1)).squeeze(dim=1)
-        test_labels = torch.tensor(test_labels, dtype=torch.long)
-        test_images = test_images.unsqueeze(dim=1)
         pred = model(test_images)
         pred = pred.argmax(dim=1)
         accuracy = (pred == test_labels).sum().item() / len(test_labels)
         print(f"Test accuracy: {accuracy}")
     
     torch.save(model.state_dict(), "model.pth")
-
-def normalize(images):
-    
-    min_values = torch.amin(images, dim=(2, 3), keepdim=True)
-    max_values = torch.amax(images, dim=(2, 3), keepdim=True)
-
-# Subtract the minimum values and normalize
-    normalized_image = (images - min_values) / (max_values - min_values + 1e-6)
-    return normalized_image
 
 
 def draw_digit(args):
@@ -118,55 +151,49 @@ def draw_digit(args):
     window.title("Draw Digit")
     
     # Create a canvas to draw on
-    canvas_width = 200
-    canvas_height = 200
+    canvas_width = args.size
+    canvas_height = args.size
+    cell_size = canvas_width // 28
     canvas = tk.Canvas(window, width=canvas_width, height=canvas_height, bg="black")
     canvas.pack()
     
-    # Create an image and draw object
-    image = Image.new("L", (canvas_width, canvas_height), color=0)
-    draw = ImageDraw.Draw(image)
-    
-    # Variables to track mouse movement
-    prev_x = None
-    prev_y = None
-    
     # Function to handle mouse movement
+    canvas.array = np.zeros((28, 28))
     
     def on_mouse_move(event):
-        nonlocal prev_x, prev_y
-        x = event.x
-        y = event.y
-        if prev_x is not None and prev_y is not None:
-            canvas.create_line(prev_x, prev_y, x, y, width=10, fill="white")
-            draw.line([(prev_x, prev_y), (x, y)], fill=255, width=10)
-        prev_x = x
-        prev_y = y
-    
-    # Function to handle mouse release
-    def on_mouse_release(event):
-        nonlocal prev_x, prev_y
-        prev_x = None
-        prev_y = None
+        col = event.x // cell_size
+        row = event.y // cell_size
+        
+        point = np.zeros((28, 28))
+        point[row, col] = 1.0
+        #apply a gaussian blur to the point
+        point = gaussian_filter(point, sigma=0.9)
+        point = point / point.max()
+        
+        canvas.array = np.clip(canvas.array + point, 0, 1)
+        
+        update()
+        
+        predict_digit()
     
     # Function to predict the digit
-    
-    def preprocess(image):
-        resized_image = image.resize((28, 28))
-        
-        # Convert the image to grayscale and normalize the pixel values
-        grayscale_image = resized_image.convert("L")
-        grayscale_image = np.array(grayscale_image)
-        
-        # Convert the image to a PyTorch tensor
-        tensor_image = torch.tensor(grayscale_image, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
-        tensor_image = normalize(tensor_image)
-        
-        return tensor_image
+
+    def update():
+        for row in range(28):
+            for col in range(28):
+                gray_value = int(255 * canvas.array[row, col])  # Adjust this value based on your desired intensity
+                
+                x1 = col * cell_size
+                y1 = row * cell_size
+                x2 = (col + 1) * cell_size
+                y2 = (row + 1) * cell_size
+
+                # Create a rectangle with the specified grayscale color
+                color = f'#{gray_value:02x}{gray_value:02x}{gray_value:02x}'
+                canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline=color)
+
     def predict_digit():
-        #get the image on the canvas
-        tensor_image = preprocess(image)
-        # Feed the image to the CNN model and predict the digit
+        tensor_image = torch.from_numpy(canvas.array).unsqueeze(dim=0).unsqueeze(dim=0).float()
         prediction = model(tensor_image)
         predicted_digit = prediction.argmax(dim=1).item()
         
@@ -175,8 +202,7 @@ def draw_digit(args):
     
     def clear_drawing():
         canvas.delete("all")
-        image.paste(0, box=(0, 0, 200, 200))
-        draw.rectangle((0, 0, 200, 200), fill=0)
+        canvas.array = np.zeros((28, 28))
     
     def predict(event):
         digit = event.char
@@ -184,18 +210,43 @@ def draw_digit(args):
             return
         else:
             digit = int(digit)
-        tensor_image = preprocess(image)
-        tensor_image.requires_grad_(True)
+        tensor_image = torch.from_numpy(canvas.array).unsqueeze(dim=0).unsqueeze(dim=0).float()
         
-        optimizer = torch.optim.Adam([tensor_image], lr=1e-2)
+        #create noise center around 1 and with sigma 0.1
+        noise = 0.1*torch.randn_like(tensor_image)
+        noise.requires_grad = True
         
-        prediction = model(tensor_image)
-        while prediction.argmax(dim=1).item() != digit:
-            optimizer.zero_grad()
-            loss = -prediction[0][digit]
-            loss.backward()
-            optimizer.step()
-            prediction = model(tensor_image)
+        sigmoid = torch.nn.Sigmoid()
+
+        max_iter = 100
+        digit_tensor = torch.zeros(10)
+        digit_tensor[digit] = -1
+        max_noise = 1
+        
+        pred = -1
+        
+        flag = False
+        for max_noise in tqdm(np.linspace(0.2, 1, 10)):
+            if flag:
+                break
+            
+            optimizer = torch.optim.Adam([noise], lr=1e-2)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.95)
+            for _ in range(max_iter):
+                scale_noise = max_noise*2*(sigmoid(2*noise) - 1/2)
+                candidate_image = sigmoid(4*(tensor_image + scale_noise - 1/2))
+                prediction = model(candidate_image)
+                pred = prediction.argmax(dim=1).item()
+                optimizer.zero_grad()
+                loss = torch.sum(digit_tensor*prediction)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(noise, 0.1)
+                optimizer.step()
+                scheduler.step()
+                
+                flag = pred == digit
+                if flag:
+                    break
         
         #set the image on the canvas equal to the gradient
         predicted_digit = prediction.argmax(dim=1).item()
@@ -203,18 +254,8 @@ def draw_digit(args):
         # Display the predicted digit
         result_label.config(text=f"Predicted Digit: {predicted_digit}")
         
-        #transform the image back to a PIL image
-        new_image = np.clip(255*tensor_image.squeeze(dim=0).squeeze(dim=0).detach().numpy(), 0, 255)
-        new_image = Image.fromarray(new_image)
-        new_image = new_image.resize((200, 200))
-        #paste the new image on the canvas
-        image.paste(new_image, box=(0, 0, 200, 200))
-        #draw.rectangle((0, 0, 200, 200), fill=0)
-        
-        canvas.delete("all")
-        canvas.image = ImageTk.PhotoImage(image)
-        canvas.create_image(0, 0, anchor="nw", image=canvas.image)
-        
+        canvas.array = candidate_image.squeeze(dim=0).squeeze(dim=0).detach().numpy()
+        update()
         
         
         
@@ -223,17 +264,12 @@ def draw_digit(args):
     clear_button = tk.Button(window, text="Clear", command=clear_drawing)
     clear_button.pack()
     
-    # Button to predict the digit
-    predict_button = tk.Button(window, text="Predict", command=predict_digit)
-    predict_button.pack()
-    
     # Label to display the predicted digit
     result_label = tk.Label(window, text="")
     result_label.pack()
     
     # Bind mouse events to canvas
     canvas.bind("<B1-Motion>", on_mouse_move)
-    canvas.bind("<ButtonRelease-1>", on_mouse_release)
     #bind predict to any digit key press
     window.bind("<Key>", predict)
     
@@ -250,20 +286,27 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers(title="subcommands", dest="subcommand")
     
     plot_parser = subparsers.add_parser("plot", help="visualize the data")
-    plot_parser.add_argument("-n", type=int, default=10, help="number of images to plot")
+    plot_parser.add_argument("-n", type=int, default=12, help="number of images to plot")
+    plot_parser.add_argument("--normalize", action="store_true", help="normalize the images")
+    plot_parser.add_argument("--rotate", action="store_true", help="rotate the images")
+    plot_parser.add_argument("--translate", action="store_true", help="translate the images")
     plot_parser.set_defaults(func=plot)
     
     download_parser = subparsers.add_parser("download", help="download the data")
     download_parser.set_defaults(func=download)
     
     train_parser = subparsers.add_parser("train", help="train the model")
-    train_parser.add_argument("--batch", type=int, default=64, help="batch size")
+    train_parser.add_argument("--batch", type=int, default=256, help="batch size")
     train_parser.add_argument("--epoch", type=int, default=5, help="number of epochs")
-    train_parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
+    train_parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
     train_parser.set_defaults(func=train)
     
     draw_parser = subparsers.add_parser("draw", help="draw a digit")
+    draw_parser.add_argument("--size", type=int, default=280, help="size of the canvas")
     draw_parser.set_defaults(func=draw_digit)
+    
+    benchmark_parser = subparsers.add_parser("benchmark", help="benchmark the model")
+    benchmark_parser.set_defaults(func=benchmark)
     
     args = parser.parse_args()
 
