@@ -11,14 +11,13 @@ import utils
 from topology import CNN
 import preprocess
 
-import time
-
 try:
     import tkinter as tk
     from PIL import Image, ImageTk
     from PIL import Image, ImageDraw
 except ImportError:
     graphics_installed = False
+    print("Warning: tkinter and/or PIL not installed. You will not be able to draw digits.")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
