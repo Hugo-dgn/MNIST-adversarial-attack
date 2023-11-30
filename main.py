@@ -11,6 +11,8 @@ import utils
 from topology import CNN
 import preprocess
 
+import time
+
 try:
     import tkinter as tk
     from PIL import Image, ImageTk
@@ -165,23 +167,32 @@ def draw_digit(args):
         row = event.y // cell_size
         
         point = np.zeros((28, 28))
-        point[row, col] = 1.0
+        if 0 <= row < 28 and 0 <= col < 28:
+            point[row, col] = 1.0
+        else:
+            return
         #apply a gaussian blur to the point
         point = gaussian_filter(point, sigma=0.9)
         point = point / point.max()
         
+        indices = point < 0.1
+        point[indices] = 0
+        
         canvas.array = np.clip(canvas.array + point, 0, 1)
         
-        update()
+        update(~indices)
         
         if not args.optim:
             predict_digit()
     
     # Function to predict the digit
 
-    def update():
+    def update(indices):
+        
         for row in range(28):
             for col in range(28):
+                if not indices[row, col]:
+                    continue
                 gray_value = int(255 * canvas.array[row, col])  # Adjust this value based on your desired intensity
                 
                 x1 = col * cell_size
@@ -256,7 +267,7 @@ def draw_digit(args):
         result_label.config(text=f"Predicted Digit: {predicted_digit}")
         
         canvas.array = candidate_image.squeeze(dim=0).squeeze(dim=0).detach().numpy()
-        update()
+        update(canvas.array > -1)
         
         
     # Button to predict the digit
