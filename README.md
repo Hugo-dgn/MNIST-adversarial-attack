@@ -28,6 +28,16 @@ python main.py plot
 python main.py train --batch 64 --epoch 10 --lr 0.001
 ```
 
+## Evaluation of the AI
+
+To assess the performance of the AI, run this command:
+
+```bash
+python main.py benchmark
+```
+
+It will provide you with the accuracy for each class and the overall accuracy on the test dataset.
+
 ## Perform Adversarial Attack in Real Time
 
 ```bash

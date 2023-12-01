@@ -83,6 +83,11 @@ def benchmark(args):
         accuracy = (pred == labels).sum().item() / len(labels)
         print(f"Test accuracy for class {i}: {accuracy}")
     
+    pred = model(test_images)
+    pred = pred.argmax(dim=1)
+    accuracy = (pred == test_labels).sum().item() / len(test_labels)
+    print(f"Test accuracy: {accuracy}")
+    
     
 
 def train(args):
