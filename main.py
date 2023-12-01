@@ -145,6 +145,9 @@ def train(args):
 
 def draw_digit(args):
 
+    if not graphics_installed:
+        raise ImportError("tkinter and/or PIL not installed. You will not be able to draw digits.")
+
     model = CNN()
     if os.path.exists("model.pth"):
         model.load_state_dict(torch.load("model.pth"))
@@ -224,7 +227,7 @@ def draw_digit(args):
     def predict(event):
         digit = event.char
         if not digit.isdigit():
-            if event.char == "a":
+            if event.char.lower() == "a":
                 digit = -1
             else:
                 return
@@ -243,6 +246,7 @@ def draw_digit(args):
         max_iter = 100
         digit_tensor = torch.zeros(10)
         if digit != -1:
+            digit_tensor[old_digit] = 0.1
             digit_tensor[digit] = -1
             admissible_digit = [digit]
         else:
