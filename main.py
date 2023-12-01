@@ -210,6 +210,7 @@ def draw_digit(args):
         
         # Display the predicted digit
         result_label.config(text=f"Predicted Digit: {predicted_digit}")
+        return predicted_digit
     
     def clear_drawing():
         canvas.delete("all")
@@ -218,23 +219,31 @@ def draw_digit(args):
     def predict(event):
         digit = event.char
         if not digit.isdigit():
-            return
+            if event.char == "a":
+                digit = -1
+            else:
+                return
         else:
             digit = int(digit)
         tensor_image = torch.from_numpy(canvas.array).unsqueeze(dim=0).unsqueeze(dim=0).float()
         
-        #create noise center around 1 and with sigma 0.1
         noise = 0.1*torch.randn_like(tensor_image)
         noise.requires_grad = True
         
         sigmoid = torch.nn.Sigmoid()
+        
+        old_digit = predict_digit()
+        pred = old_digit
 
         max_iter = 100
         digit_tensor = torch.zeros(10)
-        digit_tensor[digit] = -1
+        if digit != -1:
+            digit_tensor[digit] = -1
+            admissible_digit = [digit]
+        else:
+            digit_tensor[old_digit] = 1
+            admissible_digit = [i for i in range(10) if i != old_digit]
         max_noise = 1
-        
-        pred = -1
         
         flag = False
         for max_noise in tqdm(np.linspace(0.2, 1, 10)):
@@ -255,7 +264,7 @@ def draw_digit(args):
                 optimizer.step()
                 scheduler.step()
                 
-                flag = pred == digit
+                flag = pred in admissible_digit
                 if flag:
                     break
         
@@ -264,8 +273,26 @@ def draw_digit(args):
         
         # Display the predicted digit
         result_label.config(text=f"Predicted Digit: {predicted_digit}")
+
+        new_image = candidate_image.squeeze(dim=0).squeeze(dim=0).detach().numpy()
+
+        if args.plot:
+            #draw old, new image and noise on the same figure
+            fig, axes = plt.subplots(1, 3, figsize=(10, 10))
+            fig.suptitle(f"Old, New and Noise Image", fontsize=16)
+            axes[0].imshow(canvas.array, cmap="gray")
+            axes[0].axis("off")
+            axes[0].set_title(old_digit)
+            axes[1].imshow(new_image, cmap="gray")
+            axes[1].axis("off")
+            axes[1].set_title(predicted_digit)
+            axes[2].imshow(scale_noise.squeeze(dim=0).squeeze(dim=0).detach().numpy(), cmap="gray")
+            axes[2].axis("off")
+            axes[2].set_title("Noise")
+            plt.tight_layout()
+            plt.show()
         
-        canvas.array = candidate_image.squeeze(dim=0).squeeze(dim=0).detach().numpy()
+        canvas.array = new_image
         update(canvas.array > -1)
         
         
@@ -317,7 +344,8 @@ if __name__ == "__main__":
     
     draw_parser = subparsers.add_parser("draw", help="draw a digit")
     draw_parser.add_argument("--size", type=int, default=280, help="size of the canvas")
-    draw_parser.add_argument("--optim", action="store_true", help="optimize the image")
+    draw_parser.add_argument("--optim", action="store_true", help="only predict when pressing the predict button")
+    draw_parser.add_argument("--plot", action="store_true", help="plot the noise use for adversarial attack")
     draw_parser.set_defaults(func=draw_digit)
     
     benchmark_parser = subparsers.add_parser("benchmark", help="benchmark the model")
