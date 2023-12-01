@@ -13,8 +13,7 @@ import preprocess
 
 try:
     import tkinter as tk
-    from PIL import Image, ImageTk
-    from PIL import Image, ImageDraw
+    graphics_installed = True
 except ImportError:
     graphics_installed = False
     print("Warning: tkinter and/or PIL not installed. You will not be able to draw digits.")
