@@ -40,4 +40,6 @@ Note that if your PC is too slow, you can run this command instead:
 python main.py draw --optim
 ```
 
-This will add a button `predict`, the digit will only be predicted when this button is pressed.
+This will add a button `predict`; the digit will only be predicted when this button is pressed.
+
+Once the AI recognizes the digit you have drawn, press any digit on your keyboard to perform the adversarial attack. The right noise, which must be added to the image, will then be computed. If you just want the prediction to change to any other number, press the `a` key (for `any`).
